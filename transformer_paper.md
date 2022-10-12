@@ -132,7 +132,7 @@
   
   2. 一张图像中的像素数要远远超过一段文字当中的单词数，而自注意力的计算复杂度与图像尺寸的平方成正比，对于语义分割等需要像素级精度的任务，高分辨率图像计算代价难以承受（ViT）
 
-- Swin将图像分割成大小4×4的patch，为了产生具有层次结构的特征表达，采用batch merging层，将输入中2×2的邻接patch（特征维度为C）连接（特征维度4C），并通过一个线性层将特征维度降低到2C，同时分辨率降低为原来的1/2
+- Swin将图像分割成大小为4×4的patch（通过卷积得到），为了产生具有层次结构的特征表达，采用batch merging层，将输入中2×2的邻接patch（特征维度为C）连接（特征维度4C），并通过一个线性层将特征维度降低到2C，同时分辨率降低为原来的1/2
 
 - 相比ViT计算全局自注意力的方式，Swin采用平移窗口（包含M×M个patch，e.g.,M=7）方案，只在窗口内计算自注意力，计算复杂度与图像尺寸成正比；transformer block交替使用两种窗口划分的自注意力模块，一种是常规划分的W-MSA，另一种SW-MSA通过将常规窗口平移(⌊M/2⌋, ⌊M/2⌋)得到，自注意力可以使用cyclic-shifting和attention masking的方式计算
   
@@ -174,4 +174,59 @@
   mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
   attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
   attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
+  ```
+
+---
+
+## [Learning Transferable Visual Models From Natural Language Supervision](papers/CLIP.pdf)
+
+\#**CLIP**    \#**multi-modal**    \#**zero-shot**    \#**natural language supervison**
+
+- 自然语言监督学习相比监督学习而言，不需要准确标注的数据，因而更容易增大规模
+
+- 相比无监督或自监督方法而，自然语言监督学习不仅仅学习到一种特征表示，而且将这种表示与语言结合起来，从而实现灵活的zero-shot迁移学习
+
+- 训练效率对大规模的自然语言监督学习至关重要。此前工作表明，对比学习任务比预测任务能够学习到更好的表示；图像生成模型虽然能够学习到更好的表示，但是比对比学习模型的计算量高出一个量级。CLIP采用类似对比学习的代理任务，对于一个有N个图像-文本对的batch（e.g.,N=32768），训练模型预测N×N个可能的配对中，哪些配对是正确的
+
+- 采用对称的交叉熵损失函数，softmax函数中，控制logits（未归一化的概率）大小的温度参数τ，在训练过程中学习
+
+- 在进行zero-shot图像分类时，分别通过图像和文本encoder获得图像和标签的特征表示，然后计算图像和各个标签的余弦相似度，继而计算一个softmax概率分布，标签的特征表示可以复用
+
+- 使用类似“A photo of a {label}.”的模板处理标签，可以减少歧义的发生，从而提高准确率；通过将各种描述模板组合，可以进一步提高准确率；计算标签在不同模板下产生的特征表示，并缓存其均值进行复用，可以减少计算量
+
+- 图像encoder使用resnet时，采用anti-aliasing strided convolution，用kernel_size=stride的avgpool和stride为1的卷积层取代原本stride>1的卷积层；最后的池化层没有采用avgpool，而是一个attentionpool
+
+- 文本encoder使用了masked attention，[EOS]的输出作为整个文本的特征表示
+
+### 模型架构
+
+![clip.png](images\clip.png)
+
+### pytorch实现
+
+- [github链接](https://github.com/wushidiguo/CLIP)
+
+- 伪代码
+  
+  ```python
+  # image_encoder - ResNet or Vision Transformer
+  # text_encoder - CBOW or Text Transformer
+  # I[n, h, w, c] - minibatch of aligned images
+  # T[n, l] - minibatch of aligned texts
+  # W_i[d_i, d_e] - learned proj of image to embed
+  # W_t[d_t, d_e] - learned proj of text to embed
+  # t - learned temperature parameter
+  # extract feature representations of each modality
+  I_f = image_encoder(I) #[n, d_i]
+  T_f = text_encoder(T) #[n, d_t]
+  # joint multimodal embedding [n, d_e]
+  I_e = l2_normalize(np.dot(I_f, W_i), axis=1)
+  T_e = l2_normalize(np.dot(T_f, W_t), axis=1)
+  # scaled pairwise cosine similarities [n, n]
+  logits = np.dot(I_e, T_e.T) * np.exp(t)
+  # symmetric loss function
+  labels = np.arange(n)
+  loss_i = cross_entropy_loss(logits, labels, axis=0)
+  loss_t = cross_entropy_loss(logits, labels, axis=1)
+  loss = (loss_i + loss_t)/2
   ```
