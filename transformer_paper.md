@@ -104,7 +104,7 @@
 
 ### 模型架构
 
-![mae.png](D:\notebook\deep-learning-notebook\images\mae.png)
+![mae.png](images/mae.png)
 
 ### pytorch实现
 
@@ -136,7 +136,7 @@
 
 - 相比ViT计算全局自注意力的方式，Swin采用平移窗口（包含M×M个patch，e.g.,M=7）方案，只在窗口内计算自注意力，计算复杂度与图像尺寸成正比；transformer block交替使用两种窗口划分的自注意力模块，一种是常规划分的W-MSA，另一种SW-MSA通过将常规窗口平移(⌊M/2⌋, ⌊M/2⌋)得到，自注意力可以使用cyclic-shifting和attention masking的方式计算
   
-  ![swin_cyclic.png](./images/swin_cyclic.png)
+  ![swin_cyclic.png](images/swin_cyclic.png)
 
 - 计算自注意力时，对每个head引入一个可学习的相对位置偏置矩阵$B∈R^{M^{2}\times M^{2}}$，可以提高模型准确率
   
@@ -148,7 +148,7 @@
 
 ### 模型架构
 
-![swin.png](./images/swin.png)
+![swin.png](images/swin.png)
 
 ### pytorch实现
 
@@ -200,7 +200,7 @@
 
 ### 模型架构
 
-![clip.png](images\clip.png)
+![clip.png](images/clip.png)
 
 ### pytorch实现
 
@@ -230,3 +230,45 @@
   loss_t = cross_entropy_loss(logits, labels, axis=1)
   loss = (loss_i + loss_t)/2
   ```
+
+---
+
+## [MLP-Mixer: An all-MLP Architecture for Vision](papers/MLP-Mixer.pdf)
+
+\#**MLP-Mixer**
+
+- 不使用卷积操作和自注意力机制，只有MLP（多层感知机）
+- 与ViT类似，将图像分割成patch，每个patch表示成一个向量
+- MLP有两类，分别用于*channel-mixing*（相当于1×1的卷积，对应transformer中的FF）和*token-mixing*（对应于自注意力）
+- 由于MLP本身就带有位置属性，所以Mixer不需要额外的位置编码
+
+### 模型架构
+
+![mixer.png](images/mixer.png)
+
+### pytorch实现
+
+- [github链接](https://github.com/wushidiguo/mlp-mixer-pytorch)
+
+---
+
+## [FNet: Mixing Tokens with Fourier Transforms](papers/FNet.pdf)
+
+\#**FNet**  \#**Fourier Transform**
+
+- 不使用自注意力层（计算复杂度为$O(N^2)$)
+- 认为自注意力本质上是token之间信息的融合，可以用两个有参的矩阵乘法（类似Mixer，分别混合*sequence dimension*和*hidden dimension*）代替，甚至用无参的快速傅里叶变换（计算复杂度$O(N\log{N})$）进行token融合，也能取得接近的结果
+- FNet用傅里叶层取代自注意力层，每个傅里叶层进行一次二维DFT（离散傅里叶变换，等效于分别在sequence dimension和hidden dimension进行一维DFT）：
+  
+  $$
+  y=\mathfrak{R}(\mathcal{F}_{seq}(\mathcal{F}_h(x)))
+  $$
+- FNet在某些任务上准确度达到transformer的92%以上，训练速度比transformer快了80%，加入少量的自注意力层，能进一步提高准确率
+
+### 模型架构
+
+![fnet.png](images/fnet.png)
+
+### pytorch实现
+
+- [github链接](https://github.com/wushidiguo/FNet-pytorch)
